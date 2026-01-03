@@ -6,11 +6,16 @@ namespace CouriersFix;
 
 internal class Program
 {
-    private const string inPath = "C:\\Program Files (x86)\\Steam\\steamapps\\content\\app_1030300\\1.0.28891\\Hollow Knight Silksong_Data\\Managed\\Assembly-CSharp.dll";
-    private const string outPath = "C:\\Program Files (x86)\\Steam\\steamapps\\content\\app_1030300\\1.0.28891-CouriersFix\\Hollow Knight Silksong_Data\\Managed\\Assembly-CSharp.dll";
-
-    public static void Main()
+    public static void Main(string[] args)
     {
+        if (args.Length < 2)
+        {
+            Console.WriteLine("Usage: CouriersFix.exe <in-path> <out-path>");
+        }
+
+        string inPath = args[0];
+        string outPath = args[1];
+
         using ModuleDefMD module = ModuleDefMD.Load(inPath);
 
         /*
@@ -64,8 +69,7 @@ internal class Program
             .NestedTypes.First(x => x.Name == "ShopItemInfo");
         FieldDef runningGenericListField = simpleQuestsShopOwnerType
             .Fields.First(x => x.Name == "runningGenericList");
-        FieldDef questField = simpleQuestsShopOwnerType
-            .NestedTypes.First(x => x.Name.Contains("ShopItemInfo"))
+        FieldDef questField = shopItemInfoType
             .Fields.First(x => x.Name == "Quest");
         MethodDef isCompletedGetter = module
             .Types.First(x => x.Name == "FullQuestBase")
@@ -74,16 +78,22 @@ internal class Program
         TypeRef listType = module
             .GetTypeRefs().First(x => x.Name == "List`1");
         MemberRef constructor = module
-            .GetMemberRefs().First(x => x.Name == ".ctor" && x.MethodSig.Params.Count == 0
-            && x.DeclaringType.Name == "List`1" && ((GenericInstSig)x.DeclaringType.ToTypeSig()).GenericArguments[0].TypeName == "ShopItemInfo");
+            .GetMemberRefs().First(x => x.Name == ".ctor"
+            && x.MethodSig.Params.Count == 0
+            && x.DeclaringType.Name == "List`1"
+            && ((GenericInstSig)x.DeclaringType.ToTypeSig()).GenericArguments[0].TypeName == "ShopItemInfo");
         MemberRef countGetter = module
-            .GetMemberRefs().First(x => x.Name == "get_Count" && x.DeclaringType.Name == "List`1");
+            .GetMemberRefs().First(x => x.Name == "get_Count"
+            && x.DeclaringType.Name == "List`1");
         MemberRef indexer = module
-            .GetMemberRefs().First(x => x.Name == "get_Item" && x.DeclaringType.Name == "List`1");
+            .GetMemberRefs().First(x => x.Name == "get_Item"
+            && x.DeclaringType.Name == "List`1");
         MemberRef addMethod = module
-            .GetMemberRefs().First(x => x.Name == "Add" && x.DeclaringType.Name == "List`1");
+            .GetMemberRefs().First(x => x.Name == "Add"
+            && x.DeclaringType.Name == "List`1");
         MemberRef addRangeMethod = module
-            .GetMemberRefs().First(x => x.Name == "AddRange" && x.DeclaringType.Name == "List`1");
+            .GetMemberRefs().First(x => x.Name == "AddRange"
+            && x.DeclaringType.Name == "List`1");
 
         TypeSig listSig = new GenericInstSig((ClassSig)listType.ToTypeSig(), shopItemInfoType.ToTypeSig());
 
