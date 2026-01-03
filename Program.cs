@@ -21,14 +21,21 @@ internal class Program
          * ...
          * this.runningGenericList.Shuffle<SimpleQuestsShopOwner.ShopItemInfo>();
          * <-- BEGIN INJECTED -->
+         * List<SimpleQuestsShopOwner.ShopItemInfo> completed = [];
+         * List<SimpleQuestsShopOwner.ShopItemInfo> notCompleted = [];
          * for (int i = 0; i < runningGenericList.Count; i++)
          * {
          *     if (runningGenericList[i].Quest.IsCompleted)
          *     {
-         *         runningGenericList.Add(runningGenericList[i]);
-         *         runningGenericList.RemoveAt(i);
+         *         completed.Add(runningGenericList[i]);
+         *     }
+         *     else
+         *     {
+         *         notCompleted.Add(runningGenericList[i]);
          *     }
          * }
+         * notCompleted.AddRange(completed);
+         * runningGenericList = notCompleted;
          * <-- END INJECTED -->
          * while (this.runningGenericList.Count > this.genericQuestCap)
          * {
@@ -53,6 +60,8 @@ internal class Program
             insertIndex++;
         }
 
+        TypeDef shopItemInfoType = simpleQuestsShopOwnerType
+            .NestedTypes.First(x => x.Name == "ShopItemInfo");
         FieldDef runningGenericListField = simpleQuestsShopOwnerType
             .Fields.First(x => x.Name == "runningGenericList");
         FieldDef questField = simpleQuestsShopOwnerType
@@ -62,22 +71,40 @@ internal class Program
             .Types.First(x => x.Name == "FullQuestBase")
             .Properties.First(x => x.Name == "IsCompleted").GetMethod;
 
+        TypeRef listType = module
+            .GetTypeRefs().First(x => x.Name == "List`1");
+        MemberRef constructor = module
+            .GetMemberRefs().First(x => x.Name == ".ctor" && x.MethodSig.Params.Count == 0
+            && x.DeclaringType.Name == "List`1" && ((GenericInstSig)x.DeclaringType.ToTypeSig()).GenericArguments[0].TypeName == "ShopItemInfo");
         MemberRef countGetter = module
             .GetMemberRefs().First(x => x.Name == "get_Count" && x.DeclaringType.Name == "List`1");
         MemberRef indexer = module
             .GetMemberRefs().First(x => x.Name == "get_Item" && x.DeclaringType.Name == "List`1");
         MemberRef addMethod = module
             .GetMemberRefs().First(x => x.Name == "Add" && x.DeclaringType.Name == "List`1");
-        MemberRef removeAtMethod = module
-            .GetMemberRefs().First(x => x.Name == "RemoveAt" && x.DeclaringType.Name == "List`1");
+        MemberRef addRangeMethod = module
+            .GetMemberRefs().First(x => x.Name == "AddRange" && x.DeclaringType.Name == "List`1");
 
+        TypeSig listSig = new GenericInstSig((ClassSig)listType.ToTypeSig(), shopItemInfoType.ToTypeSig());
+
+        Local completedLocal = body.Variables.Add(new Local(listSig));
+        Local notCompletedLocal = body.Variables.Add(new Local(listSig));
         Local iLocal = body.Variables.Add(new Local(module.CorLibTypes.Int32));
 
         List<Instruction> instructions = [];
 
         Instruction startWhile = OpCodes.Nop.ToInstruction();
+        Instruction startElse = OpCodes.Nop.ToInstruction();
         Instruction endIf = OpCodes.Nop.ToInstruction();
         Instruction endWhile = OpCodes.Nop.ToInstruction();
+
+        // List<SimpleQuestsShopOwner.ShopItemInfo> completed = [];
+        instructions.Add(OpCodes.Newobj.ToInstruction(constructor));
+        instructions.Add(OpCodes.Stloc.ToInstruction(completedLocal));
+
+        // List<SimpleQuestsShopOwner.ShopItemInfo> notCompleted = [];
+        instructions.Add(OpCodes.Newobj.ToInstruction(constructor));
+        instructions.Add(OpCodes.Stloc.ToInstruction(notCompletedLocal));
 
         // int i = 0;
         instructions.Add(OpCodes.Ldc_I4_0.ToInstruction());
@@ -98,22 +125,27 @@ internal class Program
         instructions.Add(OpCodes.Callvirt.ToInstruction(indexer));
         instructions.Add(OpCodes.Ldfld.ToInstruction(questField));
         instructions.Add(OpCodes.Callvirt.ToInstruction(isCompletedGetter));
-        instructions.Add(OpCodes.Brfalse.ToInstruction(endIf));
+        instructions.Add(OpCodes.Brfalse.ToInstruction(startElse));
 
-        // runningGenericList.Add(runningGenericList[i]);
-        instructions.Add(OpCodes.Ldarg_0.ToInstruction());
-        instructions.Add(OpCodes.Ldfld.ToInstruction(runningGenericListField));
+        // completed.Add(runningGenericList[i]);
+        instructions.Add(OpCodes.Ldloc.ToInstruction(completedLocal));
         instructions.Add(OpCodes.Ldarg_0.ToInstruction());
         instructions.Add(OpCodes.Ldfld.ToInstruction(runningGenericListField));
         instructions.Add(OpCodes.Ldloc.ToInstruction(iLocal));
         instructions.Add(OpCodes.Callvirt.ToInstruction(indexer));
         instructions.Add(OpCodes.Call.ToInstruction(addMethod));
 
-        // runningGenericList.RemoveAt(i);
+        // } else {
+        instructions.Add(OpCodes.Br.ToInstruction(endIf));
+        instructions.Add(startElse);
+
+        // notCompleted.Add(runningGenericList[i]);
+        instructions.Add(OpCodes.Ldloc.ToInstruction(notCompletedLocal));
         instructions.Add(OpCodes.Ldarg_0.ToInstruction());
         instructions.Add(OpCodes.Ldfld.ToInstruction(runningGenericListField));
         instructions.Add(OpCodes.Ldloc.ToInstruction(iLocal));
-        instructions.Add(OpCodes.Call.ToInstruction(removeAtMethod));
+        instructions.Add(OpCodes.Callvirt.ToInstruction(indexer));
+        instructions.Add(OpCodes.Call.ToInstruction(addMethod));
 
         // }
         instructions.Add(endIf);
@@ -127,6 +159,16 @@ internal class Program
         // }
         instructions.Add(OpCodes.Br.ToInstruction(startWhile));
         instructions.Add(endWhile);
+
+        // notCompleted.AddRange(completed);
+        instructions.Add(OpCodes.Ldloc.ToInstruction(notCompletedLocal));
+        instructions.Add(OpCodes.Ldloc.ToInstruction(completedLocal));
+        instructions.Add(OpCodes.Call.ToInstruction(addRangeMethod));
+
+        // runningGenericList = notCompleted;
+        instructions.Add(OpCodes.Ldarg_0.ToInstruction());
+        instructions.Add(OpCodes.Ldloc.ToInstruction(notCompletedLocal));
+        instructions.Add(OpCodes.Stfld.ToInstruction(runningGenericListField));
 
         foreach (Instruction instruction in instructions)
         {
