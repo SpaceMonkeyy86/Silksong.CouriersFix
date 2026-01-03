@@ -75,30 +75,25 @@ internal class Program
             .Types.First(x => x.Name == "FullQuestBase")
             .Properties.First(x => x.Name == "IsCompleted").GetMethod;
 
-        TypeRef listType = module
-            .GetTypeRefs().First(x => x.Name == "List`1");
-        MemberRef constructor = module
-            .GetMemberRefs().First(x => x.Name == ".ctor"
-            && x.MethodSig.Params.Count == 0
-            && x.DeclaringType.Name == "List`1"
-            && ((GenericInstSig)x.DeclaringType.ToTypeSig()).GenericArguments[0].TypeName == "ShopItemInfo");
-        MemberRef countGetter = module
-            .GetMemberRefs().First(x => x.Name == "get_Count"
-            && x.DeclaringType.Name == "List`1");
-        MemberRef indexer = module
-            .GetMemberRefs().First(x => x.Name == "get_Item"
-            && x.DeclaringType.Name == "List`1");
-        MemberRef addMethod = module
-            .GetMemberRefs().First(x => x.Name == "Add"
-            && x.DeclaringType.Name == "List`1");
-        MemberRef addRangeMethod = module
-            .GetMemberRefs().First(x => x.Name == "AddRange"
-            && x.DeclaringType.Name == "List`1");
+        AssemblyRef netstandardRef = module.GetAssemblyRef("netstandard");
+        TypeSpec listType = new TypeSpecUser(new GenericInstSig(new ClassSig(
+            new TypeRefUser(module, "System.Collections.Generic", "List`1", netstandardRef)), shopItemInfoType.ToTypeSig()));
+        TypeSpec enumerableType = new TypeSpecUser(new GenericInstSig(new ClassSig(
+            new TypeRefUser(module, "System.Collections.Generic", "IEnumerable`1", netstandardRef)), new GenericVar(0)));
 
-        TypeSig listSig = new GenericInstSig((ClassSig)listType.ToTypeSig(), shopItemInfoType.ToTypeSig());
+        MemberRef constructor = new MemberRefUser(module, ".ctor",
+            MethodSig.CreateInstance(module.CorLibTypes.Void), listType);
+        MemberRef countGetter = new MemberRefUser(module, "get_Count",
+            MethodSig.CreateInstance(module.CorLibTypes.Int32), listType);
+        MemberRef indexer = new MemberRefUser(module, "get_Item",
+            MethodSig.CreateInstance(new GenericVar(0), module.CorLibTypes.Int32), listType);
+        MemberRef addMethod = new MemberRefUser(module, "Add",
+            MethodSig.CreateInstance(module.CorLibTypes.Void, new GenericVar(0)), listType);
+        MemberRef addRangeMethod = new MemberRefUser(module, "AddRange",
+            MethodSig.CreateInstance(module.CorLibTypes.Void, enumerableType.TypeSig), listType);
 
-        Local completedLocal = body.Variables.Add(new Local(listSig));
-        Local notCompletedLocal = body.Variables.Add(new Local(listSig));
+        Local completedLocal = body.Variables.Add(new Local(listType.TypeSig));
+        Local notCompletedLocal = body.Variables.Add(new Local(listType.TypeSig));
         Local iLocal = body.Variables.Add(new Local(module.CorLibTypes.Int32));
 
         List<Instruction> instructions = [];
@@ -143,7 +138,7 @@ internal class Program
         instructions.Add(OpCodes.Ldfld.ToInstruction(runningGenericListField));
         instructions.Add(OpCodes.Ldloc.ToInstruction(iLocal));
         instructions.Add(OpCodes.Callvirt.ToInstruction(indexer));
-        instructions.Add(OpCodes.Call.ToInstruction(addMethod));
+        instructions.Add(OpCodes.Callvirt.ToInstruction(addMethod));
 
         // } else {
         instructions.Add(OpCodes.Br.ToInstruction(endIf));
@@ -155,7 +150,7 @@ internal class Program
         instructions.Add(OpCodes.Ldfld.ToInstruction(runningGenericListField));
         instructions.Add(OpCodes.Ldloc.ToInstruction(iLocal));
         instructions.Add(OpCodes.Callvirt.ToInstruction(indexer));
-        instructions.Add(OpCodes.Call.ToInstruction(addMethod));
+        instructions.Add(OpCodes.Callvirt.ToInstruction(addMethod));
 
         // }
         instructions.Add(endIf);
